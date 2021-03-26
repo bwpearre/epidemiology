@@ -4,6 +4,8 @@ from sklearn.linear_model import LinearRegression
 import scipy
 import matplotlib.pyplot as plt
 import itertools
+import matplotlib.colors as colors
+from pathlib import Path
 
 def firstword2float(w):
         a = ''.join(itertools.takewhile(lambda x: x in '0123456789-.,eEIiNnFf', w))
@@ -13,16 +15,6 @@ def firstword2float(w):
             return float(a)
         except:
             return float('NaN')
-
-def tercile(x, quants):
-    if x < quants[0]:
-        return 0
-    elif x < quants[1]:
-        return 1
-    elif x < 99999:
-        return 2
-    else:
-        return float('NaN')
 
 field_converters = {'Guns per 100 inhabitants': firstword2float,
                     'Homicide': firstword2float,
@@ -37,10 +29,14 @@ field_converters = {'Guns per 100 inhabitants': firstword2float,
                     'CIA R/P[5]': firstword2float
                     }
 
-files = ('data/GunViolenceByCountry.csv', 'data/wealth.csv', 'data/GiniByIncome.csv', 'data/homicides.csv')
+datadir = Path('data/world')
+files = ('GunViolenceByCountry.csv', 'wealth.csv', 'GiniByIncome.csv', 'homicides.csv')
+
+# Load everything
 df = []
 for f in files:
-    df.append(pd.read_csv(f, index_col=0, converters=field_converters))
+        fname = datadir / f
+        df.append(pd.read_csv(fname, index_col=0, converters=field_converters))
 d = pd.concat(df, axis=1)
 
 x = 'CIA Gini[6]'
@@ -55,9 +51,11 @@ y = 'Suicide'
 y = 'Rate' # All murders, from https://en.wikipedia.org/wiki/List_of_countries_by_intentional_homicide_rate
 y = 'Homicide'
 
-quantiles = np.nanquantile(d['GDP per capita'], (.3333, .6666))
-for i in d.index:
-    d.loc[i, 'tercile'] = tercile(d.loc[i, 'GDP per capita'], quantiles)
+ncolors = 3
+c = 'GDP per capita'
+boundaries = np.nanquantile((d[c]), np.linspace(0, 1, ncolors+1))
+cmap = plt.get_cmap('jet')
+norm = colors.BoundaryNorm(boundaries, cmap.N, clip=True)
 
 fit_x = d[x].to_numpy().reshape(-1,1)
 fit_y = d[y].to_numpy()
@@ -74,7 +72,7 @@ print(f'=== Every 1-point reduction in {x} is associated with a {100*(1-1/10**mo
 fit_test = np.asarray((np.min(d[x]), np.max(d[x]))).reshape(-1,1)
 
 #scat = plt.scatter(x = d[x], y = d[y], s = 10*d['Guns per 100 inhabitants'], c=d['tercile'])
-scat = plt.scatter(x = d[x][mask], y = d[y][mask], s = 10*d['Guns per 100 inhabitants'][mask], c=d['GDP per capita'][mask])
+scat = plt.scatter(x = d[x][mask], y = d[y][mask], s = 10*d['Guns per 100 inhabitants'][mask], c=(d[c][mask]), cmap = cmap, norm = norm)
 plt.plot(fit_test, 10**model.predict(fit_test))
 #scat = plt.scatter(x = d[x], y = d['Suicide'], s = 10*d['Guns per 100 inhabitants'], c='blue')
 #scat = plt.scatter(x = d[x], y = d[y])
