@@ -24,6 +24,10 @@ def sigfig(x, n):
         else:
                 return round(x, -int(np.floor(np.log10(abs(x)))) + (n - 1))
 
+column_rename = {'Rate': 'Homicides, all methods (per 100,000 inhabitants)',
+                     'Homicide': 'Homicides, guns only (per 100,000 inhabitants)',
+                     'Suicide': 'Suicides, guns only (per 100,000 inhabitants)'
+                     }
 field_converters = {'Guns per 100 inhabitants': n2f,
                     'Homicide': n2f,
                     'Suicide': n2f,
@@ -38,7 +42,7 @@ field_converters = {'Guns per 100 inhabitants': n2f,
                     'Gun ownership (%)(2013)': n2f,
                     'Margin': n2f # field_converters doesn't work with MultiIndex, but DOES work on the first level
                     }
-US_state_index_converters = {'Ala.': 'Alabama',
+US_state_index_rename = {'Ala.': 'Alabama',
                     'Ark.': 'Arkansas',
                     'Calif.': 'California',
                     'Colo.': 'Colorado',
@@ -113,9 +117,12 @@ for f,i in files.items():
                 df[-1].columns = [': '.join(col).strip() for col in df[-1].columns.values]
                 
         if area == 'usa':
-                df[-1].rename(index=US_state_index_converters, inplace = True)
+                df[-1].rename(index=US_state_index_rename, inplace = True)
 d = pd.concat(df, axis=1)
 
+d.rename(columns=column_rename, inplace=True)
+
+# Gini is represented as 0--1 or 0--100%. Let's force the latter:
 for i in d.columns:
         if "Gini" in i and is_numeric_dtype(d[i]):
                 if np.max(d[i]) <= 1:
@@ -135,9 +142,9 @@ if area == 'world':
         y = 'Healthy life expectancy (HALE) at birth: Male'
         y = 'Healthy life expectancy (HALE) at birth: Female'
         y = 'Healthy life expectancy (HALE) at birth: Both'
-        y = 'Suicide'
-        y = 'Rate' # All murders, from https://en.wikipedia.org/wiki/List_of_countries_by_intentional_homicide_rate
-        y = 'Homicide'
+        y = 'Suicides, guns only (per 100,000 inhabitants)'
+        y = 'Homicides, all methods (per 100,000 inhabitants)'
+        y = 'Homicides, guns only (per 100,000 inhabitants)'
         
         c = 'GDP per capita'
         c = 'Guns per 100 inhabitants'
@@ -147,9 +154,9 @@ else:
         x = 'Population density  (inhabitants per square mile) (2010)'
         x = 'Gini Coefficient'
         
-        y = 'Gun murders  (rate per 100,000 inhabitants) (2010)'
         y = 'Margin: %'
         y = 'Murders (rate per 100,000 inhabitants)(2010)'
+        y = 'Gun murders  (rate per 100,000 inhabitants) (2010)'
         
         c = 'Population density  (inhabitants per square mile) (2010)'
         c = 'Gun ownership (%)(2013)'
@@ -178,13 +185,15 @@ if False:
 
 model = LinearRegression().fit(fit_x[mask], fit_y[mask])
 if model.coef_[0] < 0:
-        direction = 'increase'
+        direction = 'in'
 else:
-        direction = 'decrease'
+        direction = 'de'
 if scaling == 'log':
-        print(f'Every 1-point reduction in {x} is associated with a {sigfig(100*np.abs(1-1/10**model.coef_[0]), 2)}% {direction} in {y}.')
+        sensitivity = 100*(1-1/10**model.coef_[0])
+        print(f'Every 1-point reduction in {x} is associated with a {sigfig(abs(sensitivity), 2)}% {direction}crease in {y}.')
 else:
-        print(f'Every 1-point reduction in {x} is associated with a {sigfig(np.abs(model.coef_[0]), 2)} {direction} in {y}.')   
+        sensitivity = model.coef_[0]
+        print(f'Every 1-point reduction in {x} is associated with a {sigfig(sensitivity, 2)} {direction}crease in {y}.')   
 
 fit_test = np.asarray((np.min(d[x]), np.max(d[x]))).reshape(-1,1)
 
@@ -203,7 +212,7 @@ if scaling == 'log':
 else:
         plt.plot(fit_test, model.predict(fit_test))
 
-plt.title('Gun violence vs. Income inequality')
+plt.title(f'{y} vs. {x}. Slope = {sigfig(sensitivity, 2)}%')
 plt.xlabel(x)
 plt.ylabel(y)
 plt.rcParams.update({'axes.titlesize': 20, 'axes.labelsize': 20, 'xtick.labelsize': 20})
