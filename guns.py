@@ -9,10 +9,10 @@ from pathlib import Path
 from pandas.api.types import is_numeric_dtype
 
 def n2f(w):
-        w = w.replace('−', '-')
+        w = w.replace('−', '-')     # They look the same, but they're not!
         a = ''.join(itertools.takewhile(lambda x: x in '0123456789-.,eEIiNnFf', w))
-        if a != w:
-            print(f'Read "{w}", converted to "{a}"')
+#        if a != w:
+#            print(f'Read "{w}", converted to "{a}"')
         try:
             return float(a)
         except:
@@ -79,7 +79,7 @@ US_state_index_converters = {'Ala.': 'Alabama',
 
 
 
-area = 'usa'                                      # ('usa', 'world')
+area = 'world'                                      # ('usa', 'world')
 if area == 'world':
         datadir = Path('data/world')
         # Format: filename: (indexcol, headerlines)
@@ -87,7 +87,7 @@ if area == 'world':
                  'GiniByWealth': (0, 0),          # https://en.wikipedia.org/wiki/List_of_countries_by_wealth_equality
                  'GiniByIncome': (0, [0, 1]),     # https://en.wikipedia.org/wiki/List_of_countries_by_income_equality
                  'Homicides': (0, 0),             # https://en.wikipedia.org/wiki/List_of_countries_by_intentional_homicide_rate
-                 'Happiness2020': (1, 0),         # https://en.wikipedia.org/wiki/World_Happiness_Report
+                 #'Happiness2020': (1, 0),         # https://en.wikipedia.org/wiki/World_Happiness_Report BUT IT SEEMS TOO SKETCHY
                  'LifeExpectancyWHO': (1, [0,1])  # https://en.wikipedia.org/wiki/List_of_countries_by_life_expectancy
                  }
 else:
@@ -101,16 +101,15 @@ else:
 df = []
 for f,i in files.items():
         fname = datadir / (f + '.csv')
-        print(f'----- loading {f} -----')
+        #print(f'----- loading {f} -----')
         df.append(pd.read_csv(fname, index_col=i[0], converters=field_converters, header=i[1]))
-        print(df[-1].columns)
         for j in df[-1].columns:
                 if type(j) == type(1):
-                        # column name is an int. probably a ranking.
+                        # Column name is an int. Probably a ranking.
                         df[-1].drop(j, axis=1, inplace=True)
                         
         if type(i[1]) == type([]):
-                # having trouble accessing multicolumns. flatten them
+                # Having trouble accessing multicolumns. Flatten them.
                 df[-1].columns = [': '.join(col).strip() for col in df[-1].columns.values]
                 
         if area == 'usa':
@@ -118,7 +117,7 @@ for f,i in files.items():
 d = pd.concat(df, axis=1)
 
 for i in d.columns:
-        if "Gini" in i and is_numeric_dtype(i):
+        if "Gini" in i and is_numeric_dtype(d[i]):
                 if np.max(d[i]) <= 1:
                         d[i] = d[i].map(lambda x: x * 100)
 
@@ -128,17 +127,17 @@ if area == 'world':
         x = 'CIA R/P[5]'
         x = 'UN R/P'
         x = 'Guns per 100 inhabitants'
-        x = 'Wealth Gini (2019)' # Careful: some of these are 0-100 and some are 0-1
+        x = 'Wealth Gini (2019)'
         x = 'World Bank Gini[4]: %'
 
+        y = 'Healthy life expectancy (HALE) at birth: Δ b/w females & males'
+        y = 'Healthy life expectancy (HALE) at age 60: Δ b/w females & males'
+        y = 'Healthy life expectancy (HALE) at birth: Male'
+        y = 'Healthy life expectancy (HALE) at birth: Female'
+        y = 'Healthy life expectancy (HALE) at birth: Both'
         y = 'Suicide'
         y = 'Rate' # All murders, from https://en.wikipedia.org/wiki/List_of_countries_by_intentional_homicide_rate
         y = 'Homicide'
-        y = 'Healthy life expectancy (HALE) at birth: Δ b/w females & males'
-        y = 'Healthy life expectancy (HALE) at age 60: Δ b/w females & males'
-        y = 'Healthy life expectancy (HALE) at birth: Both'
-        y = 'Healthy life expectancy (HALE) at birth: Male'
-        y = 'Healthy life expectancy (HALE) at birth: Female'
         
         c = 'GDP per capita'
         c = 'Guns per 100 inhabitants'
@@ -148,15 +147,15 @@ else:
         x = 'Population density  (inhabitants per square mile) (2010)'
         x = 'Gini Coefficient'
         
-        y = 'Murders (rate per 100,000 inhabitants)(2010)'
         y = 'Gun murders  (rate per 100,000 inhabitants) (2010)'
         y = 'Margin: %'
+        y = 'Murders (rate per 100,000 inhabitants)(2010)'
         
         c = 'Population density  (inhabitants per square mile) (2010)'
         c = 'Gun ownership (%)(2013)'
         w = 'Gini Coefficient'
 
-scaling = 'linear'
+scaling = 'log'           # ('linear', 'log')
 
 ncolors = 3
 boundaries = np.nanquantile((d[c]), np.linspace(0, 1, ncolors+1))
