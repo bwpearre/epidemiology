@@ -8,7 +8,11 @@ import matplotlib.colors as colors
 from pathlib import Path
 import seaborn as sns
 from pandas.api.types import is_numeric_dtype
+import re
+import ast
+import numbers
 
+# Convert a string to a float---or at least as much as possible before the string goes stringy (e.g. "123.45 [in Aughust '84]" --> 123.45)
 def n2f(w):
         w = w.replace('−', '-')     # They look the same, but they're not!
         a = ''.join(itertools.takewhile(lambda x: x in '0123456789-.,eEIiNnFf', w))
@@ -19,144 +23,102 @@ def n2f(w):
         except:
             return float('NaN')
 
+# Return a string representation of x with n significant figures
 def sigfig(x, n):
         if x == 0:
-                return x
+                return "0"
         else:
-                return round(x, -int(np.floor(np.log10(abs(x)))) + (n - 1))
+                return str(round(x, -int(np.floor(np.log10(abs(x)))) + (n - 1)))
 
-column_rename = {'Rate': 'Homicides (all methods) (per 100,000)',
-                 'Rate': 'All gun-related deaths (per 100,000)',
-                 'Murders (rate per 100,000 inhabitants)(2010)': 'Homicides (all methods) (per 100,000)',
-                 'Homicide': 'Homicides (guns only) (per 100,000)',
-                 'Gun murders  (rate per 100,000 inhabitants) (2010)': 'Homicides (guns only) (per 100,000)',
-                 'Suicide': 'Suicides, guns only (per 100,000)',
-                 'Margin: %': 'Biden vs. Trump: margin (percentage points)',
-                 'World Bank Gini[4]: %': 'Income inequality (Gini %)',
-                 'Gini Coefficient': 'Income inequality (Gini %)',
-                 'Wealth Gini (2019)': 'Wealth inequality (Gini %, 2019)',
-                 'Wealth Gini (2018)': 'Wealth inequality (Gini %, 2018)',
-                 'Wealth Gini (2008)': 'Wealth inequality (Gini %, 2008)',
-                 'Total': 'Total gun-related deaths',
-                 }
-field_converters = {'Guns per 100 inhabitants': n2f,
-                    'Homicide': n2f,
-                    'Suicide': n2f,
-                    'Unintentional': n2f,
-                    'Undetermined': n2f,
-                    'Total': n2f,
-                    'World Bank Gini[4]': n2f,
-                    'UN R/P': n2f,
-                    'CIA Gini[6]': n2f,
-                    'Population (in thousands)': n2f,
-                    'CIA R/P[5]': n2f,
-                    'Gun ownership (%)(2013)': n2f,
-                    'Margin': n2f, # field_converters doesn't work with MultiIndex, but DOES work on the first level
-                    }
-US_state_index_rename = {'Ala.': 'Alabama',
-                    'Ark.': 'Arkansas',
-                    'Calif.': 'California',
-                    'Colo.': 'Colorado',
-                    'Conn.': 'Connecticut',
-                    'Del.': 'Delaware',
-                    'D.C.': 'District of Columbia',
-                    'Ky.': 'Kentucky',
-                    'La.': 'Louisiana',
-                    'Md.': 'Maryland',
-                    'Maine †': 'Maine',
-                    'Mass.': 'Massachusetts',
-                    'Miss.': 'Mississippi',
-                    'Mich.': 'Michigan',
-                    'Minn.': 'Minnesota',
-                    'Mo.': 'Missouri',
-                    'Mont.': 'Montana',
-                    'Neb. †': 'Nebraska',
-                    'Nev.[o]': 'Nevada',
-                    'N.H.': 'New Hampshire',
-                    'N.J.[p]': 'New Jersey',
-                    'N.M.': 'New Mexico',
-                    'N.Y.[q]': 'New York',
-                    'N.C.': 'North Carolina',
-                    'N.D.': 'North Dakota',
-                    'Okla.': 'Oklahoma',
-                    'Pa.': 'Pennsylvania',
-                    'R.I.': 'Rhode Island',
-                    'S.C.': 'South Carolina',
-                    'S.D.': 'South Dakota',
-                    'Tenn.': 'Tennessee',
-                    'Texas[s]': 'Texas',
-                    'Vt.': 'Vermont',
-                    'Va.': 'Virginia',
-                    'Wash.': 'Washington',
-                    'W.Va.': 'West Virginia',
-                    'Wis.': 'Wisconsin',
-                    'Wyo.': 'Wyoming'}
+# "data/*/files.csv" contains special fields for cleaning our raw data. In particular,
+# "Index rename" and "Column rename" can be NaN or Dict or "read up to 'str'". Convert the latter two to what they really are, safely
+def parse_file_converters(string):
+        # What converter functions do we recognise?
+        legal_converter_functions = {'n2f'}
+        
+        if type(string) == str and len(string) > 0:
+                if 'readupto' in string:
+                        # Provide a string like " (" after which input will be discarded; e.g. "New Hampshire (N.H.)"
+                        upto = re.findall('"([^"]*)"', string)[0] # Get the first quoted string after the keyword:
+                        return lambda z: z.split(upto)[0] # Split on the split string, return first element
+                else:
+                        # Provide a Dictionary of converters. Check if the converter is a legal function, and if so, point to it.
+                        a = ast.literal_eval(string)
+                        if type(a) == dict:
+                                for k,v in a.items():
+                                        if v in legal_converter_functions:
+                                                # Convert the name of a legal converter function to the actual function:
+                                                a[k] = globals()[v]
+                                                
+                        return a
+        # Apparently I can just not bother to return a new value.
+
 
 
 areas = {'USA': {}, 'world': {}}
 scaling = 'log'           # ('linear', 'log')
 
 datadir = Path('data')
-# Format: filename: (indexcol, headerlines, indexrename, columnrename)
-areas['world'] = {'files': {'GunViolence': (0, 0),           # https://en.wikipedia.org/wiki/List_of_countries_by_firearm-related_death_rate
-                            'GiniByWealth': (0, 0),          # https://en.wikipedia.org/wiki/List_of_countries_by_wealth_equality
-                            'GiniByIncome': (0, [0, 1]),     # https://en.wikipedia.org/wiki/List_of_countries_by_income_equality
-                            'Homicides': (0, 0, None, {'Rate': 'Homicides (all methods) (per 100,000)'}),             # https://en.wikipedia.org/wiki/List_of_countries_by_intentional_homicide_rate
-                            #'Happiness2020': (1, 0),         # https://en.wikipedia.org/wiki/World_Happiness_Report BUT IT SEEMS TOO SKETCHY
-                            'LifeExpectancyWHO': (1, [0,1])  # https://en.wikipedia.org/wiki/List_of_countries_by_life_expectancy
-                            }}
-areas['USA'] = {'files': {'Homicides': (0, 0),
-                          'GunDeaths2013': (0, 0, lambda z: z.split(' (')[0]), # https://en.wikipedia.org/wiki/Firearm_death_rates_in_the_United_States_by_state
-                          'GiniByIncome': (1, 0),
-                          'Election2020': (0, [0,1], US_state_index_rename)
-                          }}
 
 fig = plt.figure(1)
 plt.clf()
 sp = 0                          # subplot window
+
+
 # Load everything
 for area,a in areas.items():
+        # Read the file that describes the actual data files:
+        files = pd.read_csv(datadir / area / 'files.csv', sep='\t', index_col='Filename', converters={'Index rename': parse_file_converters, 'Column rename': parse_file_converters, 'Clean': parse_file_converters})
+        
+        for c in files.columns:
+                if c == 'Header lines':
+                        # Header lines is numeric but maybe a list; e.g. 1 or [1,2,5]. It will have been read as a string. Convert it here:
+                        files[c] = files[c].map(lambda z: ast.literal_eval(z))
+                        
         df = []
-        for f,i in a['files'].items():
+        for f in files.index:
                 fname = datadir / area / (f + '.csv')
-                df.append(pd.read_csv(fname, index_col=i[0], converters=field_converters, header=i[1]))
+                df.append(pd.read_csv(fname, index_col=files.loc[f,'Index column'], header=files.loc[f,'Header lines'], converters=files.loc[f,'Clean']))
+
+                # Column name is an int. Probably a ranking. Kill it,
+                # because I can't figure out a better way. This has to
+                # be done before the multiindex check below...
                 for j in df[-1].columns:
-                        if type(j) == type(1):
-                                # Column name is an int. Probably a ranking.
+                        if isinstance(j, numbers.Number):
                                 df[-1].drop(j, axis=1, inplace=True)
 
-                if type(i[1]) == type([]):
-                        # Having trouble accessing multicolumns. Flatten them.
+                # MultiIndices create annoying special cases. Flatten the names.
+                if type(files.loc[f,'Header lines']) == list:
                         df[-1].columns = [': '.join(col).strip() for col in df[-1].columns.values]
 
-                if len(i) == 3 and i[2] is not None:
-                        df[-1].rename(index=i[2], inplace=True)
-                if len(i) == 4:
-                        df[-1].rename(columns=i[3], inplace=True)
+                # Rename indices, if requested
+                if type(files.loc[f,"Index rename"]) == dict or callable(files.loc[f,"Index rename"]):
+                        df[-1].rename(index=files.loc[f,"Index rename"], inplace=True)
+
+                # Rename columns, if requested
+                if type(files.loc[f,"Column rename"]) == dict:
+                        df[-1].rename(columns=files.loc[f,"Column rename"], inplace=True)
+                        
         d = pd.concat(df, axis=1)
-        d.rename(columns=column_rename, inplace=True)
-        a['d'] = d
+
+        print(f'***** Possible indices for the {area} *****\n{d.dtypes}')
 
         # Gini is represented as 0--1 or 0--100%. Let's force the latter:
         for i in d.columns:
                 if "Gini" in i and is_numeric_dtype(d[i]):
                         if np.max(d[i]) <= 1:
-                                d[i] = d[i].map(lambda x: x * 100)
-
-        a['d'] = d
-
-        
-        
+                                d[i] = d[i] * 100
         if area == 'world':
                 x = 'CIA Gini[6]'
                 x = 'GDP per capita'
-                x = 'CIA R/P[5]'
                 x = 'UN R/P'
                 x = 'Wealth inequality (Gini %, 2018)'
                 x = 'Wealth inequality (Gini %, 2019)'
                 x = 'Wealth inequality (Gini %, 2008)'
                 x = 'Guns per 100 inhabitants'
                 x = 'Income inequality (Gini %)'
+                x = 'CIA R/P[5]: 10%'
+                d[x] = d[x].map(lambda x: np.log10(x))
 
                 y = 'Healthy life expectancy (HALE) at birth: Δ b/w females & males'
                 y = 'Healthy life expectancy (HALE) at age 60: Δ b/w females & males'
@@ -180,7 +142,7 @@ for area,a in areas.items():
                 y = 'All gun-related deaths (per 100,000)'
                 y = 'Gun ownership (%)(2013)'
                 y = 'Homicides (guns only) (per 100,000)'
-                y = 'Homicides (all methods) (per 100,000)'
+                y = 'Murders (all methods) (per 100,000)'
 
 
                 c = 'Population density  (inhabitants per square mile) (2010)'
@@ -240,7 +202,7 @@ for area,a in areas.items():
         else:
                 plt.plot(fit_test, model.predict(fit_test))
 
-        plt.title(f'{y} vs. {x}. Slope = {sigfig(sensitivity, 2)}%')
+        plt.title(f'{y.split("(")[0]} vs. {x.split("(")[0]} --  Slope = {sigfig(sensitivity, 2)}%')
         plt.xlabel(x)
         plt.ylabel(y)
         #plt.rcParams.update({'axes.titlesize': 20, 'axes.labelsize': 20, 'xtick.labelsize': 20})

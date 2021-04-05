@@ -1,0 +1,6 @@
+Filename	Format	Index column	Header lines	Index rename	Column rename	Clean	Source
+GunViolence	csv	0	0		{'Homicide': 'Homicides (guns only) (per 100,000)','Suicide': 'Suicides, guns only (per 100,000)','Total': 'Total gun-related deaths'}	{"Homicide":"n2f","Suicide":"n2f","Total":"n2f","Guns per 100 inhabitants":"n2f"}	https://en.wikipedia.org/wiki/List_of_countries_by_firearm-related_death_rate
+GiniByWealth	csv	0	0	{"Congo, Rep.": "R Congo", "Congo, Dem. Rep.": "DR Congo"}	{'Wealth Gini (2019)': 'Wealth inequality (Gini %, 2019)','Wealth Gini (2018)': 'Wealth inequality (Gini %, 2018)','Wealth Gini (2008)': 'Wealth inequality (Gini %, 2008)'}		https://en.wikipedia.org/wiki/List_of_countries_by_wealth_equality
+GiniByIncome	csv	0	[0,1]	{"Congo, Republic of the": "R Congo"}	{'World Bank Gini[4]: %': 'Income inequality (Gini %)'}		https://en.wikipedia.org/wiki/List_of_countries_by_income_equality
+Homicides	csv	0	0	{"Congo": "R Congo"}	{"Rate": "Homicides (all methods) (per 100,000)"}		https://en.wikipedia.org/wiki/List_of_countries_by_intentional_homicide_rate
+LifeExpectancyWHO	csv	1	[0,1]	{"Viet Nam": "Vietnam","Congo, Republic of":"R Congo","Democratic Republic of the Congo":"DR Congo","United States of America":"United States"}			https://en.wikipedia.org/wiki/List_of_countries_by_life_expectancy
