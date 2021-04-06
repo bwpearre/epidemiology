@@ -49,14 +49,16 @@ def parse_file_converters(string):
                                         if v in legal_converter_functions:
                                                 # Convert the name of a legal converter function to the actual function:
                                                 a[k] = globals()[v]
-                                                
+
                         return a
         # Apparently I can just not bother to return a new value.
 
 
 
-areas = {'USA': {}, 'world': {}}
-scaling = 'log'           # ('linear', 'log')
+areas = {'world', 'usa'}
+
+
+
 
 datadir = Path('data')
 
@@ -64,9 +66,10 @@ fig = plt.figure(1)
 plt.clf()
 sp = 0                          # subplot window
 
-
-# Load everything
-for area,a in areas.items():
+# Load everything. Data files are listed in
+# datadir/area/files.csv. Since the data files are from various
+# sources, files.csv lists how to clean them, which is used below:
+for area in areas:
         # Read the file that describes the actual data files:
         files = pd.read_csv(datadir / area / 'files.csv', sep='\t', index_col='Filename', converters={'Index rename': parse_file_converters, 'Column rename': parse_file_converters, 'Clean': parse_file_converters})
         
@@ -108,6 +111,20 @@ for area,a in areas.items():
                 if "Gini" in i and is_numeric_dtype(d[i]):
                         if np.max(d[i]) <= 1:
                                 d[i] = d[i] * 100
+
+
+                                
+        ###################################################################################################################################
+        #            Choose what to plot. I've just left a bunch of possible definitions here; put the one you want last.                 #
+        ###################################################################################################################################
+
+        # x: plot on x axis
+        # y: plot on y axis
+        # c: plot on colour axis
+        
+        # World and USA have some different data available
+        # (e.g. homicides vs murders (not quite the same) or guns/100
+        # people vs gun ownership rate etc. Don't obfuscate that.
         if area == 'world':
                 x = 'CIA Gini[6]'
                 x = 'GDP per capita'
@@ -115,42 +132,63 @@ for area,a in areas.items():
                 x = 'Wealth inequality (Gini %, 2018)'
                 x = 'Wealth inequality (Gini %, 2019)'
                 x = 'Wealth inequality (Gini %, 2008)'
+                x = 'CIA R/P[5]: 10%' # For R/P, a logx plot is better, or here's a shortcut:   d[x] = d[x].map(lambda x: np.log10(x))
                 x = 'Guns per 100 inhabitants'
                 x = 'Income inequality (Gini %)'
-                x = 'CIA R/P[5]: 10%'
-                d[x] = d[x].map(lambda x: np.log10(x))
 
+                d['Homicides (no guns)'] = d['Homicides (all methods) (per 100,000)'] - d['Homicides (guns only) (per 100,000)']
                 y = 'Healthy life expectancy (HALE) at birth: Δ b/w females & males'
                 y = 'Healthy life expectancy (HALE) at age 60: Δ b/w females & males'
                 y = 'Healthy life expectancy (HALE) at birth: Male'
                 y = 'Healthy life expectancy (HALE) at birth: Female'
                 y = 'Healthy life expectancy (HALE) at birth: Both'
                 y = 'All gun-related deaths (per 100,000)'
-                y = 'Guns per 100 inhabitants'
                 y = 'Homicides (all methods) (per 100,000)'
                 y = 'Suicides, guns only (per 100,000)'
-                y = 'Homicides (guns only) (per 100,000)'
 
+                y = 'Homicides (no guns)'
+                y = 'Homicides (guns only) (per 100,000)'
+                
+
+                c = 'Guns per 100 inhabitants'
                 c = 'GDP per capita'
 
         else:
                 x = 'Population density  (inhabitants per square mile) (2010)'
-                x = 'Gun ownership (%)'
+                x = 'Gun ownership (%)(2013)'
+                x = 'Gun-related death rate (2013)'
+                x = 'Murders (all methods) (per 100,000)'
                 x = 'Income inequality (Gini %)'
 
-                y = 'Biden vs. Trump: margin (percentage points)'
-                y = 'All gun-related deaths (per 100,000)'
+                d['Murders (no guns)'] = d['Murders (all methods) (per 100,000)'] - d['Gun murders  (rate per 100,000 inhabitants) (2010)']
                 y = 'Gun ownership (%)(2013)'
                 y = 'Homicides (guns only) (per 100,000)'
+                y = 'Biden vs. Trump: margin (percentage points)'
+                y = 'All gun-related deaths (per 100,000)'
+                y = 'Gun murders  (rate per 100,000 inhabitants) (2010)'
+
+                y = 'Murders (no guns)'
+
                 y = 'Murders (all methods) (per 100,000)'
 
-
                 c = 'Population density  (inhabitants per square mile) (2010)'
+                c = 'Income inequality (Gini %)'
                 c = 'Gun ownership (%)(2013)'
 
+        ###################################################################################################################################
+        #                 Other things to modify...                                                                                       #
+        ###################################################################################################################################
+        scaling = 'log'           # ('linear', 'log') for y axis only right now...
+        ncolors = 3               # Seems the minimum should be 2
+        if False:
+                # Look only at rich countries/regions?
+                mask &= (d['GDP per capita'] > np.nanmedian(d['GDP per capita']))
+                mask &= (d['GDP per capita'] > 20000)
+        #mask &= d.index != 'United States'
+        ###################################################################################################################################
 
-
-        ncolors = 3
+        
+        
         boundaries = np.nanquantile((d[c]), np.linspace(0, 1, ncolors+1))
         cmap = plt.get_cmap('jet')
         norm = colors.BoundaryNorm(boundaries, cmap.N, clip=True)
@@ -165,11 +203,6 @@ for area,a in areas.items():
                 fit_y = np.log10(fit_y)
                 mask &= (d[y] > 0)
 
-        if False:
-                # Look only at rich countries:
-                mask &= (d['GDP per capita'] > np.nanmedian(d['GDP per capita']))
-                mask &= (d['GDP per capita'] > 20000)
-        #mask &= d.index != 'United States'
 
 
         model = LinearRegression().fit(fit_x[mask], fit_y[mask])
@@ -189,10 +222,10 @@ for area,a in areas.items():
         # Plotting
 
         sp += 1
-        plt.subplot(1, 2, sp)
+        plt.subplot(1, len(areas), sp)
         #default_size = fig.get_size_inches()
         #fig.set_size_inches( (default_size[0]*2, default_size[1]*2) )
-        fig.set_size_inches( 20, 7)
+        fig.set_size_inches( 12*len(areas), 10)
         scat = plt.scatter(x = d[x][mask], y = d[y][mask], c=(d[c][mask]), cmap = cmap, norm = norm)
         plt.colorbar(label=c)
         #scat = plt.scatter(x = d[x][mask], y = d[y][mask])
