@@ -169,10 +169,12 @@ for area in areas:
                 y = 'Homicides (no guns)'
                 y = 'Homicides (all methods) (per 100,000)'
                 y = 'Homicides (guns only) (per 100,000)'
+                y = 'Income inequality (Gini %)'
                 
 
                 c = 'Guns per 100 inhabitants'
                 c = 'GDP per capita'
+                c = 'Homicides (all methods) (per 100,000)'
 
         else:
                 x = 'Population density  (inhabitants per square mile) (2010)'
@@ -190,26 +192,28 @@ for area in areas:
                 y = 'Murders (no guns)'
                 y = 'Murders (all methods) (per 100,000)'
                 y = 'Gun murders  (rate per 100,000 inhabitants) (2010)'
+                y = 'Income inequality (Gini %)'
 
                 c = 'Population density  (inhabitants per square mile) (2010)'
                 c = 'Income inequality (Gini %)'
                 c = 'Gun ownership (%)(2013)'
+                c = 'Murders (all methods) (per 100,000)'
+
 
         ###################################################################################################################################
         #                 Other things to modify...                                                                                       #
         ###################################################################################################################################
-        scaling = 'log'           # ('linear', 'log') for y axis only right now...
+        scaling = 'linear'           # ('linear', 'log') for y axis only right now...
         ncolors = 1               # Seems the minimum should be 2
+        mask = np.isfinite(d[x]) & np.isfinite(d[y])
         if False:
                 # Look only at rich countries/regions?
                 # mask &= (d['GDP per capita'] > np.nanmedian(d['GDP per capita']))
-                mask = (d['GDP per capita'] > 30000)
+                mask &= (d['GDP per capita'] > 17500)
         #mask &= d.index != 'United States'
         ###################################################################################################################################
 
         
-        pdb.set_trace()
-
         
         boundaries = np.nanquantile((d[c]), np.linspace(0, 1, ncolors+1))
         cmap = plt.get_cmap('jet')
@@ -218,14 +222,10 @@ for area in areas:
         fit_x = d[x].to_numpy().reshape(-1,1)
         fit_y = d[y].to_numpy()
 
-        mask = np.isfinite(d[x]) & np.isfinite(d[y])
-
 
         if scaling == 'log':
                 fit_y = np.log10(fit_y)
                 mask &= (d[y] > 0)
-
-
 
         model = LinearRegression().fit(fit_x[mask], fit_y[mask])
         if model.coef_[0] < 0:
@@ -243,32 +243,43 @@ for area in areas:
 
         # Plotting
 
+        d3 = True
+        
         sp += 1
-        plt.subplot(1, len(areas), sp)
         #default_size = fig.get_size_inches()
         #fig.set_size_inches( (default_size[0]*2, default_size[1]*2) )
         fig.set_size_inches( 12*len(areas), 10)
-        if ncolors > 1:
-                scat = plt.scatter(x = d[x][mask], y = d[y][mask], c=(d[c][mask]), cmap = cmap, norm = norm)
-                plt.colorbar(label=c)
-        else:
-                scat = plt.scatter(x = d[x][mask], y = d[y][mask])
-                
-        #scat = plt.scatter(x = d[x][mask], y = d[y][mask])
-        if scaling == 'log':
-                plt.yscale('log')
-                plt.plot(fit_test, 10**model.predict(fit_test))
-        else:
-                plt.plot(fit_test, model.predict(fit_test))
 
-        plt.title(f'{y.split("(")[0]} vs. {x.split("(")[0]} --  Slope = {sigfig(sensitivity, 2)}%')
-        plt.xlabel(x)
-        plt.ylabel(y)
-        #plt.rcParams.update({'axes.titlesize': 20, 'axes.labelsize': 20, 'xtick.labelsize': 20})
+        if d3:
+                ax = fig.add_subplot(1, 2, sp, projection='3d')
+                #ax.plot_trisurf(d[x][mask], d[y][mask], d[c][mask], cmap='viridis')
+                ax.scatter(d[x][mask], d[y][mask], np.log(d[c][mask]), c=np.log(d[c][mask]), cmap='jet')
+                ax.set_xlabel(x)
+                ax.set_ylabel(y)
+                ax.set_zlabel(c)
+        else:
+                plt.subplot(1, len(areas), sp)
+                if ncolors > 1:
+                        scat = plt.scatter(x = d[x][mask], y = d[y][mask], c=(d[c][mask]), cmap = cmap, norm = norm)
+                        plt.colorbar(label=c)
+                else:
+                        scat = plt.scatter(x = d[x][mask], y = d[y][mask])
 
-        for i in d.index[mask]:
-            plt.annotate(i, d.loc[i, [x, y]])
-        #plt.ylim(bottom = 0.01)
+                #scat = plt.scatter(x = d[x][mask], y = d[y][mask])
+                if scaling == 'log':
+                        plt.yscale('log')
+                        plt.plot(fit_test, 10**model.predict(fit_test))
+                else:
+                        plt.plot(fit_test, model.predict(fit_test))
+
+                plt.title(f'{y.split("(")[0]} vs. {x.split("(")[0]} --  Slope = {sigfig(sensitivity, 2)}%')
+                plt.xlabel(x)
+                plt.ylabel(y)
+                #plt.rcParams.update({'axes.titlesize': 20, 'axes.labelsize': 20, 'xtick.labelsize': 20})
+
+                for i in d.index[mask]:
+                    plt.annotate(i, d.loc[i, [x, y]])
+                    #plt.ylim(bottom = 0.01)
 
 plt.show()
 
