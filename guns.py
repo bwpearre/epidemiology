@@ -11,17 +11,23 @@ from pandas.api.types import is_numeric_dtype
 import re
 import ast
 import numbers
+import pdb
 
 # Convert a string to a float---or at least as much as possible before the string goes stringy (e.g. "123.45 [in Aughust '84]" --> 123.45)
 def n2f(w):
+        if not isinstance(w, str):
+                return w
+        w0 = w
         w = w.replace('−', '-')     # They look the same, but they're not!
+        w = w.replace('$', '')
+        w = w.replace(',', '')
         a = ''.join(itertools.takewhile(lambda x: x in '0123456789-.,eEIiNnFf', w))
-        #if a != w:
-        #    print(f'Read "{w}", converted to "{a}"')
         try:
-            return float(a)
+            f = float(a)
         except:
-            return float('NaN')
+            f = float('NaN')
+        print(f'Read "{w0}", converted to "{w}" and then to "{a}", finally {f}')
+        return f
 
 # Return a string representation of x with n significant figures
 def sigfig(x, n):
@@ -37,9 +43,12 @@ def parse_file_converters(string):
         legal_converter_functions = {'n2f'}
         
         if type(string) == str and len(string) > 0:
+                #if 'startafter' in string:
+                #        upto = re.findall('"([^"]*)"', string)[0] # Get the first quoted string after the keyword
+                #        return lambda z: z.split(upto)[1] # Split on the split string, return second element
                 if 'readupto' in string:
                         # Provide a string like " (" after which input will be discarded; e.g. "New Hampshire (N.H.)"
-                        upto = re.findall('"([^"]*)"', string)[0] # Get the first quoted string after the keyword:
+                        upto = re.findall('"([^"]*)"', string)[0] # Get the first quoted string after the keyword
                         return lambda z: z.split(upto)[0] # Split on the split string, return first element
                 else:
                         # Provide a Dictionary of converters. Check if the converter is a legal function, and if so, point to it.
@@ -81,6 +90,7 @@ for area in areas:
         df = []
         for f in files.index:
                 fname = datadir / area / (f + '.csv')
+                print(f'Reading {fname} with converters {files.loc[f,"Clean"]}...')
                 df.append(pd.read_csv(fname, index_col=files.loc[f,'Index column'], header=files.loc[f,'Header lines'], converters=files.loc[f,'Clean']))
 
                 # Column name is an int. Probably a ranking. Kill it,
@@ -99,8 +109,19 @@ for area in areas:
                         df[-1].rename(index=files.loc[f,"Index rename"], inplace=True)
 
                 # Rename columns, if requested
-                if type(files.loc[f,"Column rename"]) == dict:
+                if type(files.loc[f,"Column rename"]) == dict or callable(files.loc[f,"Column rename"]):
                         df[-1].rename(columns=files.loc[f,"Column rename"], inplace=True)
+
+                # Clean, if requested. Not sure why this sometimes doesn't happen in read_csv. Sometimes it already has; no harm.
+                print(f' Reading {f}, "Clean" has type {type(files.loc[f,"Clean"])} and contains {files.loc[f,"Clean"]}')
+                if type(files.loc[f,"Clean"]) == dict:
+                        for colum in files.loc[f,"Clean"]:
+                                if colum in df[-1]:
+                                        df[-1][colum] = df[-1][colum].map(files.loc[f,"Clean"][colum])
+                                else:
+                                        print(f'  ...could not find "{colum}" in {df[-1].columns}...')
+
+                        
                         
         d = pd.concat(df, axis=1)
 
@@ -127,7 +148,6 @@ for area in areas:
         # people vs gun ownership rate etc. Don't obfuscate that.
         if area == 'world':
                 x = 'CIA Gini[6]'
-                x = 'GDP per capita'
                 x = 'UN R/P'
                 x = 'Wealth inequality (Gini %, 2018)'
                 x = 'Wealth inequality (Gini %, 2019)'
@@ -135,6 +155,7 @@ for area in areas:
                 x = 'CIA R/P[5]: 10%' # For R/P, a logx plot is better, or here's a shortcut:   d[x] = d[x].map(lambda x: np.log10(x))
                 x = 'Guns per 100 inhabitants'
                 x = 'Income inequality (Gini %)'
+                x = 'GDP per capita'
 
                 d['Homicides (no guns)'] = d['Homicides (all methods) (per 100,000)'] - d['Homicides (guns only) (per 100,000)']
                 y = 'Healthy life expectancy (HALE) at birth: Δ b/w females & males'
@@ -143,10 +164,10 @@ for area in areas:
                 y = 'Healthy life expectancy (HALE) at birth: Female'
                 y = 'Healthy life expectancy (HALE) at birth: Both'
                 y = 'All gun-related deaths (per 100,000)'
-                y = 'Homicides (all methods) (per 100,000)'
                 y = 'Suicides, guns only (per 100,000)'
 
                 y = 'Homicides (no guns)'
+                y = 'Homicides (all methods) (per 100,000)'
                 y = 'Homicides (guns only) (per 100,000)'
                 
 
@@ -159,17 +180,16 @@ for area in areas:
                 x = 'Gun-related death rate (2013)'
                 x = 'Murders (all methods) (per 100,000)'
                 x = 'Income inequality (Gini %)'
+                x = 'GDP per capita'
 
                 d['Murders (no guns)'] = d['Murders (all methods) (per 100,000)'] - d['Gun murders  (rate per 100,000 inhabitants) (2010)']
                 y = 'Gun ownership (%)(2013)'
                 y = 'Homicides (guns only) (per 100,000)'
                 y = 'Biden vs. Trump: margin (percentage points)'
                 y = 'All gun-related deaths (per 100,000)'
-                y = 'Gun murders  (rate per 100,000 inhabitants) (2010)'
-
                 y = 'Murders (no guns)'
-
                 y = 'Murders (all methods) (per 100,000)'
+                y = 'Gun murders  (rate per 100,000 inhabitants) (2010)'
 
                 c = 'Population density  (inhabitants per square mile) (2010)'
                 c = 'Income inequality (Gini %)'
@@ -179,15 +199,17 @@ for area in areas:
         #                 Other things to modify...                                                                                       #
         ###################################################################################################################################
         scaling = 'log'           # ('linear', 'log') for y axis only right now...
-        ncolors = 3               # Seems the minimum should be 2
+        ncolors = 1               # Seems the minimum should be 2
         if False:
                 # Look only at rich countries/regions?
-                mask &= (d['GDP per capita'] > np.nanmedian(d['GDP per capita']))
-                mask &= (d['GDP per capita'] > 20000)
+                # mask &= (d['GDP per capita'] > np.nanmedian(d['GDP per capita']))
+                mask = (d['GDP per capita'] > 30000)
         #mask &= d.index != 'United States'
         ###################################################################################################################################
 
         
+        pdb.set_trace()
+
         
         boundaries = np.nanquantile((d[c]), np.linspace(0, 1, ncolors+1))
         cmap = plt.get_cmap('jet')
@@ -226,8 +248,12 @@ for area in areas:
         #default_size = fig.get_size_inches()
         #fig.set_size_inches( (default_size[0]*2, default_size[1]*2) )
         fig.set_size_inches( 12*len(areas), 10)
-        scat = plt.scatter(x = d[x][mask], y = d[y][mask], c=(d[c][mask]), cmap = cmap, norm = norm)
-        plt.colorbar(label=c)
+        if ncolors > 1:
+                scat = plt.scatter(x = d[x][mask], y = d[y][mask], c=(d[c][mask]), cmap = cmap, norm = norm)
+                plt.colorbar(label=c)
+        else:
+                scat = plt.scatter(x = d[x][mask], y = d[y][mask])
+                
         #scat = plt.scatter(x = d[x][mask], y = d[y][mask])
         if scaling == 'log':
                 plt.yscale('log')
